@@ -4,12 +4,11 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
-const { crearModeloUsuarios } = require('./modelos/usuarios.modelo');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const {crearModeloUsuarios} = require('./modelos/usuarios.modelo');
 const { config } = require('dotenv');
-const {crearModeloTokens} = requite('./modelos/tokens.modelo');
+const {crearModeloTokens} = require('./modelos/tokens.modelo');
 
 
 const NOMBRE_COOKIE = 'connect.sid';
@@ -47,8 +46,8 @@ function crearApp(config, pool){
       resave : false,
       saveUninitialized : false, //no crea la sesion ni la cookie
       rolling : config.rolling,
-      cookie : {
-        maxAge: config.maxAge || 1000*60*60*24,
+            cookie : {
+        maxAge: config.maxAgeMs || 1000*60*60*24,
         httpOnly: config.httpOnly,
         sameSite : config.sameSite,
         secure : false //activar el https
@@ -72,7 +71,7 @@ function crearApp(config, pool){
   //cuando estemos utilizando un middleware verificar la sesión actividad a partir ya sea de la consulta al servidor o la cookie
   function vencida(sesion){
     const desde = config.rolling ? sesion.ultimoUso : sesion.creada;
-    return Date.now() - desde > config.maxAge;
+    return Date.now() - desde > config.maxAgeMs;
   }
 
   //tenemos que identicar quien entro
@@ -121,8 +120,8 @@ function crearApp(config, pool){
       const visitas = req.session.visitas || 0;
 
       //guardo la sesion
-      const guardar = () =>{
-        req.session.datos = datos;
+            const guardar = () =>{
+        req.session.usuario = datos;
         req.session.visitas = visitas;
         req.session.creada = Date.now();
         req.session.ultimoUso = Date.now();
@@ -175,9 +174,9 @@ function crearApp(config, pool){
   app.get('/api/diagnostico/sesiones', async(req, res, next)=>{
     try{
       const sesiones = await todasLasSesiones(almacen);
-      const lista = Object.entries(sesiones || {}).map(([id], s) =>({
+            const lista = Object.entries(sesiones || {}).map(([id, s = {}]) => ({
         sesion : idCorto(id),
-        esLaTuta : id === req.sessionID,
+        esLaTuya : id === req.sessionID,
         usuario : s.usuario ? s.usuario.usuario : '(sin iniciar sesion)',
         visitas: s.visitas || 0,
         expira: s.cookie && s.cookie.expires,
@@ -255,9 +254,9 @@ function requiere(rol){
 
 app.post('/api/jwt/login', async(req, res, next)=> {
   try{
-    const {usuario, contraseña} = req.body || {};
-    const datos = await usuarios.verificar(usuario, contraseña);
-    if(!datos) return RegExp.status(401).json({error: 'usuario o contraseña incorrectos'});
+        const {usuario, contrasena} = req.body || {};
+    const datos = await usuarios.verificar(usuario, contrasena);
+    if(!datos) return res.status(401).json({error: 'usuario o contraseña incorrectos'});
     res.json({token: firmarToken(datos), usuario: datos});
   }catch(error){
     next(error);
@@ -287,9 +286,11 @@ app.get('/api/jwt/reporte', requiereJWT, requiereRolJWT('admin'), (req, res) => 
 //que le pasa al token cuando logout
 app.post('/api/jwt/logout', requiereJWT, async(req, res, next) => {
   try{
-    if(config.jwtRevocar){
-      await token.revocar(req.jwt.jti, req.jwt.usuario, req.jwt.exp);res.json({mensaje : 'token revocado en el servidor, se anota en la lista negra', revocado:true})
+        if(config.jwtRevocar){
+      await tokens.revocar(req.jwt.jti, req.jwt.usuario, req.jwt.exp);
+      return res.json({mensaje : 'token revocado en el servidor, se anota en la lista negra', revocado:true});
     }
+    res.json({mensaje: 'el servidor no guarda nada solo se puede borrar el token desde el navegador', revocado:false});ñ
     res.json({mensaje: 'el servidor no guarda nada solo se puede borrar el token desde el navegador', revocado:false});
   }catch(error){
     next(error);

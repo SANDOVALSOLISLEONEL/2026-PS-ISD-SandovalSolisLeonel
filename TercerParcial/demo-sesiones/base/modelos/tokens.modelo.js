@@ -10,7 +10,7 @@ function crearModeloTokens(pool){
 
     //pregunto este jwt esta en la lista?
     async function estaRevocado(jti) {
-        const [filas] = await pool.query('SELECT 1 FROM tokens_recovados WHERE jti = ?') [String(jti || '')];
+        const [filas] = await pool.query('SELECT 1 FROM tokens_revocados WHERE jti = ?', [String(jti || '')]);
         return filas.length > 0;
     }
 
