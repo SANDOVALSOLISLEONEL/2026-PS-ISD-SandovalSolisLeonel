@@ -20,7 +20,7 @@ module.exports = {
   sameSite: 'lax',
 
   // true: al iniciar sesión el servidor cambia el id de la sesión (protege contra la fijación de sesión).
-  regenerarAlEntrar: true,
+  regenerarAlEntrar: true ,
 
   //cuantos segundos va a durara el token
   jwtExpiraSeg : 5*60,
