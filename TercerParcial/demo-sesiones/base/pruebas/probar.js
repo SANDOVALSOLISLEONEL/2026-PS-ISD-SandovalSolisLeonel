@@ -260,6 +260,74 @@ async function filasDeSesion(usuario) {
     return r.status === 200;
   });
 
+  // ----- JWT (semana 13) -----
+  const conJWT = await arrancar();
+  //un "navegador" que manda el token en el encabezado Authorization
+  async function pedirJWT(metodo, ruta, token, cuerpo) {
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (cuerpo) headers['Content-Type'] = 'application/json';
+    const r = await fetch(conJWT.url + ruta, { method: metodo, headers, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
+    return { status: r.status, datos: await r.json(), setCookie: r.headers.get('set-cookie') };
+  }
+
+  await prueba('JWT: login correcto regresa un token y NO crea cookie', async () => {
+    const r = await pedirJWT('POST', '/api/jwt/login', null, { usuario: 'ana', contrasena: 'ana12345' });
+    return r.status === 200 && r.datos.token.split('.').length === 3 && !r.setCookie;
+  });
+
+  await prueba('JWT: sin token /api/jwt/perfil responde 401', async () => {
+    const r = await pedirJWT('GET', '/api/jwt/perfil');
+    return r.status === 401;
+  });
+
+  await prueba('JWT: con token /api/jwt/perfil responde 200', async () => {
+    const { datos } = await pedirJWT('POST', '/api/jwt/login', null, { usuario: 'ana', contrasena: 'ana12345' });
+    const r = await pedirJWT('GET', '/api/jwt/perfil', datos.token);
+    return r.status === 200 && r.datos.rol === 'alumno';
+  });
+
+  await prueba('JWT: token alterado responde 401', async () => {
+    const { datos } = await pedirJWT('POST', '/api/jwt/login', null, { usuario: 'ana', contrasena: 'ana12345' });
+    const r = await pedirJWT('GET', '/api/jwt/perfil', `${datos.token}x`);
+    return r.status === 401;
+  });
+
+  await prueba('JWT: alumno en /api/jwt/reporte 403 y admin 200', async () => {
+    const ana = (await pedirJWT('POST', '/api/jwt/login', null, { usuario: 'ana', contrasena: 'ana12345' })).datos.token;
+    const admin = (await pedirJWT('POST', '/api/jwt/login', null, { usuario: 'admin', contrasena: 'admin12345' })).datos.token;
+    const r1 = await pedirJWT('GET', '/api/jwt/reporte', ana);
+    const r2 = await pedirJWT('GET', '/api/jwt/reporte', admin);
+    return r1.status === 403 && r2.status === 200;
+  });
+
+  await prueba('JWT: refresh da un token nuevo que sí sirve', async () => {
+    const { datos } = await pedirJWT('POST', '/api/jwt/login', null, { usuario: 'luis', contrasena: 'luis12345' });
+    const nuevo = (await pedirJWT('POST', '/api/jwt/refresh', datos.token)).datos.token;
+    const r = await pedirJWT('GET', '/api/jwt/perfil', nuevo);
+    return nuevo !== datos.token && r.status === 200;
+  });
+
+  await prueba('JWT: después del logout el token queda en la lista negra (401)', async () => {
+    const { datos } = await pedirJWT('POST', '/api/jwt/login', null, { usuario: 'ana', contrasena: 'ana12345' });
+    const salir = await pedirJWT('POST', '/api/jwt/logout', datos.token);
+    const r = await pedirJWT('GET', '/api/jwt/perfil', datos.token);
+    return salir.datos.revocado === true && r.status === 401;
+  });
+  conJWT.cerrar();
+
+  const jwtCorto = await arrancar({ jwtExpiraSeg: 1 });
+  await prueba('JWT: con jwtExpiraSeg = 1, al esperar 2 s el token vence (401)', async () => {
+    const login = await fetch(`${jwtCorto.url}/api/jwt/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario: 'ana', contrasena: 'ana12345' }),
+    });
+    const { token } = await login.json();
+    await esperar(2100);
+    const r = await fetch(`${jwtCorto.url}/api/jwt/perfil`, { headers: { Authorization: `Bearer ${token}` } });
+    return r.status === 401;
+  });
+  jwtCorto.cerrar();
+
   await pool.end();
 
   console.log(`\n${pasaron} de ${total} pruebas pasaron.`);

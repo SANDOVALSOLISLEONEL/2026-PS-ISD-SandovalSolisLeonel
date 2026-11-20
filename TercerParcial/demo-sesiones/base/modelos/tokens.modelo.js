@@ -1,10 +1,11 @@
-// en este archivo vamos a tener la lista negra de la tabla de los tokens revocados. 
+// en este archivo vamos a tener la lista negra de la tabla de los tokens revocados.
 
 function crearModeloTokens(pool){
-    //vamos anotar un token como revocado, 
+    //vamos anotar un token como revocado (cuando el usuario hace logout)
+    //el exp del jwt viene en segundos, por eso usamos FROM_UNIXTIME
     async function revocar(jti, usuario, exp) {
         await pool.query(
-            'INSERT IGNORE INTO tokens_revocados (jti, usuario, expira) VALUES (?,?, FROM_UNIXTIME(?))', [jti, usuario, exp]
+            'INSERT IGNORE INTO tokens_revocados (jti, usuario, expira) VALUES (?, ?, FROM_UNIXTIME(?))', [jti, usuario, exp]
         );
     }
 
@@ -19,10 +20,9 @@ function crearModeloTokens(pool){
         const [filas] = await pool.query(
             'SELECT jti, usuario, expira, revocado_en FROM tokens_revocados ORDER BY revocado_en DESC, jti');
         return filas;
-        
     }
 
     return {revocar, estaRevocado, listar};
 }
 
-module.exports = {crearModeloTokens}
+module.exports = {crearModeloTokens};
